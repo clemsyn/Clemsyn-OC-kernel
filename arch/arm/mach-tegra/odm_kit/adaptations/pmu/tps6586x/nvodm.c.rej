@@ -1,0 +1,198 @@
+--- nvodm.c
++++ nvodm.c
+@@ -1922,3 +2011,195 @@
+ {
+     return ((Tps6586xRtcWasStartUpFromNoPower(hDevice))? NV_FALSE: NV_TRUE);
+ }
++
++static int power_fs_sync(void)
++{
++        char *argv[] = { "/system/bin/sync", NULL};
++        static char *envp[] = {
++                "HOME=/",
++                "TERM=linux",
++                "PATH=/system/sbin:/system/xbin:/sbin",
++                NULL
++        };
++        struct subprocess_info *info;
++
++        info = call_usermodehelper_setup(argv[0], argv, envp, GFP_ATOMIC);
++        if (info == NULL) {
++                return 1;
++        }
++
++        call_usermodehelper_exec(info, UMH_NO_WAIT);
++
++        mdelay(100);
++
++        emergency_sync();
++
++        mdelay(200);
++
++        return 0;
++}
++
++extern void F4_Deal(unsigned int wake_up_flag);
++extern void pmu_tegra_cpufreq_hotplug(bool onoff);
++extern unsigned int WAKE_UP_FROM_LP1_FLAG;
++struct timeval last_receive_time;       //Add for double click in 500ms; 2010-10-27
++extern unsigned int PM_SCREEN_IS_OFF;
++
++/* Interrupt function for Power Button*/
++static void Resume_Isr(void *arg)
++{
++	NvU32 data = 0;
++	NvU32 pinnum = 21 * 8 + 2; // 'v'-'a' = 21
++	struct timeval start_time, cur_time;
++	unsigned long flags = 0;
++	NvU32 delatime = 0;
++        NvU32 screen_flag = PM_SCREEN_IS_OFF;
++        
++        printk("PMU Resume Irq. In %d, %d --> ", WAKE_UP_FROM_LP1_FLAG, screen_flag);
++
++        if(atomic_add_return(1, &resume_isr_lock) != 1) {
++                atomic_sub(1, &resume_isr_lock);
++                goto left;
++        }
++
++        /* If it is already released, left */
++        if(((gpio_get_value(pinnum)& 0x1)) && (WAKE_UP_FROM_LP1_FLAG != 1)) { 
++                printk("Already release, left--> \n ");
++                goto left;
++        }
++
++        do_gettimeofday(&start_time);
++
++        //Add for double click in 500ms; 2010-10-27
++        if(WAKE_UP_FROM_LP1_FLAG != 1) {
++                if((( start_time.tv_sec == last_receive_time.tv_sec )) && 
++                   (( start_time.tv_usec - last_receive_time.tv_usec ) < 500000)) {
++                        goto left;
++                }
++        }
++
++        /* If it's the press for wake-up, send out a "KEY_F4" */
++        if(WAKE_UP_FROM_LP1_FLAG == 1) {
++                printk("Send First KEY_F4(LP1) -->");
++                F4_Deal(1);     /* Send a simulate to upper  (PowerManager Service) */
++        } else {
++                printk("F4_Deal(0)-->");
++                F4_Deal(0);
++        }
++
++	for(;;) {
++		if(!Tps6586xI2cRead8(G_hdev, TPS6586x_RBB_STAT3, &data)) {
++			break;
++		}
++
++		if(data & 0x80) {
++			/* Write EXITSLREQ to 1(0x14, bit B1) to drive the PMU to the NORMAL state */
++			if (!Tps6586xI2cRead8(G_hdev, TPS6586x_R14_SUPPLYENE, &data))
++				break;
++			
++			data = data | 0x2;
++			
++			if (!Tps6586xI2cWrite8(G_hdev, TPS6586x_R14_SUPPLYENE, data))
++				break;
++
++                        if (!Tps6586xI2cRead8(G_hdev, TPS6586x_R14_SUPPLYENE, &data))
++                                break;
++
++                        data = data & (~0x02);
++
++                        if (!Tps6586xI2cWrite8(G_hdev, TPS6586x_R14_SUPPLYENE, data))
++                                break;
++
++                        /* If WAKE_UP_FROM_LP1_FLAG is set, left
++                           (before this, PMU flag was already cleared and F4 was sent) */
++                        if(WAKE_UP_FROM_LP1_FLAG == 1) {
++                                WAKE_UP_FROM_LP1_FLAG = 0;
++                                printk("LP1(PMU flag set) -->");
++                                goto left;
++                        }
++
++                        if(screen_flag == 1) {
++                                printk("Left2Light-->");
++                                PM_SCREEN_IS_OFF = 0;
++                                /* Must left to avoid tegra-ghrost error */
++                                F4_Deal(3);
++                                goto left;
++                        }
++                } else if (delatime >= 1) {
++                        if(screen_flag == 1) {
++                                printk("Left2Light(noflag)-->");
++                                PM_SCREEN_IS_OFF = 0;
++                                /* Must left to avoid tegra-ghrost error */
++                                F4_Deal(3);
++                                goto left;
++                        }
++                }
++
++                /* Clear EXITSLREQ to 1(0x14, bit B1) in 6s */
++		if(((gpio_get_value(pinnum)& 0x1)) && (delatime < 6)) {
++                        if(WAKE_UP_FROM_LP1_FLAG == 1) { /* Release quickly and PMU flag is not set */
++                                /* Fixme : need clear PMU flag here although this flag is not set ? */
++                                printk("Release quickly(LP1) -->");
++                                WAKE_UP_FROM_LP1_FLAG = 0;
++                                goto left;
++                        } else {
++                                printk("PressRelease -->");
++                                /* Wake up another CPU */
++                                pmu_tegra_cpufreq_hotplug(1);
++                        }
++
++			break;
++		}
++		
++                /* Time come to 2+s, then always pop out selection box */
++		if((delatime >= 2) && (flags == 0)) {
++			/* Wake up another CPU to deal F4_KEY */
++			pmu_tegra_cpufreq_hotplug(1);
++
++			if(WAKE_UP_FROM_LP1_FLAG == 0) {
++                                printk("Send F4_Deal (0~2s) --> ");
++                                F4_Deal(3);
++                                flags++;
++                        }
++		}
++
++                /* If press duration is more than 5 seconds, power off device */
++		if(delatime >= 6) {
++                        data = 0x08;
++                        
++                        power_fs_sync();
++
++                        printk("Hard Power Off.\n");
++                        
++                        msleep(800);
++                        
++                        Tps6586xI2cWrite8(G_hdev, TPS6586x_R14_SUPPLYENE, data);
++			
++			break;
++		}
++
++		do_gettimeofday(&cur_time);
++		delatime = cur_time.tv_sec - start_time.tv_sec;
++	}
++        
++        printk("delatime(%d) -->", delatime);
++
++        /* If press duration is less than 2s, send a KEY_F4 to try to drive device to sleep */
++	if((WAKE_UP_FROM_LP1_FLAG == 0) && (delatime < 2)) {
++                printk("<--F4_Deal(0) >>");
++                F4_Deal(0);
++        }
++
++left:
++        /* Ok, in this loop, clear WAKE_UP_FROM_LP1_FLAG */
++        WAKE_UP_FROM_LP1_FLAG = 0;
++
++        //Add for double click in 500ms; 2010-10-27
++        do_gettimeofday(&last_receive_time);
++
++        atomic_set(&resume_isr_lock, 0);
++
++	printk("Out. \n");
++
++	NvOdmGpioInterruptDone(hGpioIntr);
++}

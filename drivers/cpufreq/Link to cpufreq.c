@@ -1,0 +1,1 @@
+/home/clemsyn/androidhtc/linux-2.6/drivers/cpufreq/cpufreq.c
