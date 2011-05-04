@@ -51,7 +51,7 @@
 
 // Maximum recommanded voltage increment per step (by nvidia) -> 100mV 
 
-#define MAX_OVERCLOCK (1700000)
+#define MAX_OVERCLOCK (1500000)
 #define MAX_AVPCLOCK (266400)
 #define MAX_GPCLOCK (425000)
 
@@ -59,13 +59,13 @@ NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo values
 NvU32 FakeShmooVmaxIndex = 6; // Max voltage index in the voltage tab (size-1)
 
 NvU32 FakeShmooVoltages[] = {
-    700,
+    750,
     825,
-    975,
+    900,
+    1000,
     1100,
+    1200,
     1250,
-    1350,
-    1525,
 };
 
 NvRmScaledClkLimits FakepScaledCpuLimits = {
@@ -76,11 +76,11 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     {
 	216000,
     	456000,
-    	760000,
+    	608000,
+    	912000,
     	1000000,
-    	1500000,
-    	1600000,
-	1700000
+    	1200000,
+	1500000,
     }
 };
 #endif // USE_FAKE_SHMOO
