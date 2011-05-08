@@ -53,7 +53,7 @@
 
 #define MAX_OVERCLOCK (1500000)
 #define MAX_AVPCLOCK (266400)
-#define MAX_GPCLOCK (425000)
+#define MAX_GPCLOCK (400000)
 
 NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo values
 NvU32 FakeShmooVmaxIndex = 6; // Max voltage index in the voltage tab (size-1)
