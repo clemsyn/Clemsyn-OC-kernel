@@ -60,12 +60,13 @@ NvU32 FakeShmooVmaxIndex = 6; // Max voltage index in the voltage tab (size-1)
 
 NvU32 FakeShmooVoltages[] = {
     750,
-    825,
+    850,
+    875,
     900,
     1000,
     1100,
     1200,
-    1275,
+    1300,
 };
 
 NvRmScaledClkLimits FakepScaledCpuLimits = {
@@ -77,9 +78,10 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
 	216000,
     	456000,
     	608000,
+        817000,
     	912000,
     	1000000,
-    	1200000,
+    	1400000,
 	1500000,
     }
 };
