@@ -56,7 +56,7 @@
 #define MAX_GPCLOCK (400000)
 
 NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo values
-NvU32 FakeShmooVmaxIndex = 6; // Max voltage index in the voltage tab (size-1)
+NvU32 FakeShmooVmaxIndex = 7; // Max voltage index in the voltage tab (size-1)
 
 NvU32 FakeShmooVoltages[] = {
     750,
